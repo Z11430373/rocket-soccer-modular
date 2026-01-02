@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>超能賽車足球：極速對決 (v18.015 Beta) - 模組化版</title>
+    <!-- 引入字體 -->
+    <link href="https://fonts.googleapis.com/css2?family=Teko:wght@400;600;700&family=Noto+Sans+TC:wght@400;700;900&family=Russo+One&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- 外部函式庫 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    
+    <!-- Google Identity Services & API -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://apis.google.com/js/api.js" async defer></script>
+
+    <!-- 複製所有 <style> 內容到此處 -->
+    <style>
+        /* =========================================
+           全局設定 & UI 樣式
+           ========================================= */
+        :root {
+            --p1-color: #ff4757;
+            --cpu-color: #1e90ff;
+            --neon-green: #00ffcc;
+            --primary-cyan: #00f3ff;
+            --primary-orange: #ff9d00;
+            --dark-bg: rgba(12, 20, 31, 0.95);
+            --hud-font: 'Teko', sans-serif;
+            --ui-font: 'Noto Sans TC', sans-serif;
+            --tech-font: 'Rajdhani', sans-serif;
+            --score-font: 'Russo One', sans-serif;
+            --hud-color: var(--neon-green);
+            --boost-color: #ffaa00;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a2e;
+            font-family: var(--ui-font);
+            user-select: none;
+            touch-action: none;
+        }
+
+        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+
+        /* --- 主選單樣式 --- */
+        #main-menu-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            padding-left: 10%;
+            box-sizing: border-box;
+            background: linear-gradient(135deg, #0f1724 0%, #16213e 100%);
+            transition: opacity 0.5s ease;
+        }
+        
+        #main-menu-overlay::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 243, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 243, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .menu-container { width: 450px; color: #fff; position: relative; z-index: 2; }
+
+        .game-title-main {
+            font-family: 'Russo One', sans-serif;
+            font-size: 5rem; margin: 0; font-style: italic; text-transform: uppercase;
+            line-height: 0.9;
+            background: linear-gradient(to right, #fff, #00f3ff);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 15px rgba(0, 243, 255, 0.4));
+        }
+        
+        .game-subtitle {
+            font-size: 1.5rem; color: var(--primary-orange); font-weight: 900;
+            letter-spacing: 2px; margin-bottom: 40px; text-transform: uppercase;
+            font-family: var(--tech-font);
+        }
+
+        .version-tag {
+            position: absolute; bottom: 20px; right: 20px;
+            color: rgba(255,255,255,0.3); font-size: 12px; font-family: monospace;
+        }
+
+        .tech-btn {
+            width: 100%; padding: 18px 25px; margin-bottom: 12px;
+            background: rgba(0, 243, 255, 0.05);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            border-left: 4px solid var(--primary-cyan);
+            color: #fff; font-family: var(--ui-font); font-size: 1.2rem; font-weight: 700;
+            text-align: left; cursor: pointer; position: relative; transition: all 0.2s ease;
+            clip-path: polygon(0 0, 100% 0, 100% 80%, 97% 100%, 0 100%);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .tech-btn:hover:not(.locked) {
+            background: var(--primary-cyan); color: #000;
+            transform: translateX(10px); box-shadow: 0 0 25px rgba(0, 243, 255, 0.4);
+        }
+        .tech-btn.locked {
+            border-color: #444; border-left-color: #666; background: rgba(0,0,0,0.3);
+            color: #777; cursor: not-allowed;
+        }
+
+        .badge { font-size: 0.7rem; background: var(--primary-orange); color: #000; padding: 2px 6px; border-radius: 2px; font-weight: 900; font-family: var(--tech-font); }
+        
+        .menu-footer { margin-top: 30px; display: flex; gap: 15px; }
+        .icon-btn {
+            background: transparent; border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.7);
+            padding: 8px 16px; cursor: pointer; font-family: var(--ui-font); font-weight: bold;
+            font-size: 0.9rem; transition: 0.3s; display: flex; align-items: center; gap: 6px;
+        }
+        .icon-btn:hover { border-color: var(--primary-cyan); color: var(--primary-cyan); background: rgba(0, 243, 255, 0.05); }
+
+        #loading {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #0f1724; 
+            z-index: 900; display: none;
+            flex-direction: column; justify-content: center; align-items: center;
+            color: white; transition: opacity 0.5s;
+        }
+        .spinner {
+            width: 50px; height: 50px; border: 4px solid rgba(0, 243, 255, 0.2);
+            border-top-color: var(--primary-cyan); border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        .modal-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.65); backdrop-filter: blur(8px);
+            z-index: 2000; display: none; justify-content: center; align-items: center; pointer-events: auto;
+        }
+        .modal-box {
+            background: #2c3e50; border: 1px solid #555; border-radius: 12px; width: 500px; max-width: 90%;
+            padding: 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); border-top: 4px solid var(--neon-green);
+            text-align: center; max-height: 80vh; overflow-y: auto;
+        }
+        .modal-title { font-size: 24px; font-weight: 900; color: #fff; margin-bottom: 25px; letter-spacing: 1px; }
+
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; display: none; flex-direction: column; justify-content: space-between; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 20px; background: linear-gradient(180deg, rgba(0,0,0,0.4) 0%, transparent 100%); }
+
+        .btn-header { background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255,255,255,0.3); color: #eee; padding: 8px 16px; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 700; transition: 0.2s; pointer-events: auto; }
+        .btn-header:hover { background: rgba(255, 255, 255, 0.3); border-color: var(--neon-green); color: #fff; }
+
+        .controls-hint { position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.5); padding: 15px; border-radius: 8px; color: #eee; font-size: 13px; line-height: 1.8; pointer-events: auto; opacity: 0.9; z-index: 30; }
+        .key-badge { display: inline-block; padding: 1px 6px; margin: 0 3px; background: #555; border-radius: 4px; color: #fff; font-weight: bold; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+    <!-- HTML 結構 -->
+    <div id="main-menu-overlay">
+        <div class="menu-container">
+            <h1 class="game-title-main">ROCKET<br>SOCCER</h1>
+            <div class="game-subtitle">極速對決</div>
+            <div class="menu-group">
+                <button class="tech-btn" id="btn-start-vs-ai"><span>單人對決 (VS AI)</span><span>▶</span></button>
+                <button class="tech-btn" id="btn-google-login">
+                    <span id="google-btn-text">登入 Google 帳戶 (雲端存檔)</span>
+                </button>
+                <button class="tech-btn locked"><span>多人連線 (Multiplayer)</span><span class="badge">開發中</span></button>
+            </div>
+            <div class="menu-footer">
+                <button class="icon-btn" id="btn-open-settings"><span>⚙️</span> 遊戲設定</button>
+                <button class="icon-btn" id="btn-open-versions"><span>📜</span> 版本紀錄</button>
+            </div>
+            <div class="version-tag">v18.015 Beta</div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal-box">
+            <div class="modal-title">遊戲設定</div>
+            <button class="btn-confirm" id="btn-confirm-settings">回到選單/遊戲</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="version-modal">
+        <div class="modal-box">
+            <div class="modal-title">開發日誌</div>
+            <div class="version-list" id="changelog-list"></div>
+            <button class="btn-confirm" id="btn-close-versions">關閉</button>
+        </div>
+    </div>
+
+    <div id="loading">
+        <div class="spinner"></div>
+        <div style="font-size: 18px; font-weight: bold; color: var(--neon-green);">賽道載入中...</div>
+    </div>
+
+    <div id="game-container"></div>
+    <div class="ui-layer" id="game-ui">
+        <div class="header">
+            <div><span id="speed-val">0</span> KM/H</div>
+            <div class="header-right">
+                <button class="btn-header" id="btn-fullscreen">⛶ 全螢幕</button>
+                <button class="btn-header" id="btn-ingame-settings">⚙️ 設定</button>
+            </div>
+        </div>
+        <div class="controls-hint" id="controls-hint">
+            <div><span class="key-badge">W</span><span class="key-badge">S</span> 油門 / 煞車</div>
+            <div><span class="key-badge">A</span><span class="key-badge">D</span> 轉向</div>
+            <div><span class="key-badge">SPACE</span> 跳躍</div>
+        </div>
+    </div>
+
+    <!-- 應用程式入口點 -->
+    <script type="module" src="src/main.js"></script>
+
+</body>
+</html>
